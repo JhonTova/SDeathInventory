@@ -1,0 +1,26 @@
+name: SDeathInventory
+version: 1.0.0
+main: me.sirius.sdeathinventory.SDeathInventory
+api-version: '1.21'
+author: Sirius
+description: Plugin para ver el inventario de jugadores al momento de morir
+
+# Sin SiriusCore.jar, Bukkit ni intenta cargar este plugin.
+depend:
+  - SiriusCore
+
+commands:
+  sdeathinventory:
+    description: Comando principal del plugin
+    usage: |-
+      /sdeathinventory reload - Recargar configuración
+      /sdeathinventory view <id> - Ver inventario
+    aliases: [sdi, sdeathInventory]
+
+permissions:
+  sdeathInventory.reload:
+    description: Permite recargar la configuración
+    default: op
+  sdeathInventory.use:
+    description: Permite usar el plugin
+    default: true
