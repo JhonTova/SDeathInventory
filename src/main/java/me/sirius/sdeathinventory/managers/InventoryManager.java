@@ -18,73 +18,80 @@ import java.util.concurrent.ConcurrentHashMap;
 public class InventoryManager {
     
     private final SDeathInventory plugin;
-    private final Map<UUID, DeathInventoryData> inventoryCache;
-    private final Map<UUID, Long> viewTimeCache;
+    // Un solo mapa: la hora de la muerte ya viaja dentro de DeathInventoryData. Antes
+    // habia un segundo mapa con la misma clave solo para la hora, y los dos podian
+    // quedar desparejados.
+    private final Map<UUID, DeathInventoryData> inventoryCache = new ConcurrentHashMap<>();
+    private final Set<UUID> viewers = ConcurrentHashMap.newKeySet();
     private BukkitTask cleanupTask;
-    
+
     public InventoryManager(SDeathInventory plugin) {
         this.plugin = plugin;
-        this.inventoryCache = new ConcurrentHashMap<>();
-        this.viewTimeCache = new ConcurrentHashMap<>();
     }
-    
+
     public void storeInventory(UUID viewId, DeathInventoryData data) {
         inventoryCache.put(viewId, data);
-        viewTimeCache.put(viewId, System.currentTimeMillis());
     }
-    
+
     public DeathInventoryData getInventory(UUID viewId) {
         DeathInventoryData data = inventoryCache.get(viewId);
-        if (data != null && isExpired(viewId)) {
-            removeInventory(viewId);
+        if (data != null && olderThan(data, plugin.getConfigManager().getCacheExpiration())) {
+            inventoryCache.remove(viewId);
             return null;
         }
         return data;
     }
-    
+
     public boolean isMessageExpired(UUID viewId) {
-        Long timestamp = viewTimeCache.get(viewId);
-        if (timestamp == null) return true;
-        
-        long messageTime = plugin.getConfigManager().getMessageTimeSeconds() * 1000L;
-        return System.currentTimeMillis() - timestamp > messageTime;
+        DeathInventoryData data = inventoryCache.get(viewId);
+        return data == null || olderThan(data, plugin.getConfigManager().getMessageTimeSeconds());
     }
-    
+
     public void removeInventory(UUID viewId) {
         inventoryCache.remove(viewId);
-        viewTimeCache.remove(viewId);
     }
-    
-    private boolean isExpired(UUID viewId) {
-        Long timestamp = viewTimeCache.get(viewId);
-        if (timestamp == null) return true;
-        
-        long expirationTime = plugin.getConfigManager().getCacheExpiration() * 1000L;
-        return System.currentTimeMillis() - timestamp > expirationTime;
+
+    private static boolean olderThan(DeathInventoryData data, int seconds) {
+        return System.currentTimeMillis() - data.getTimestamp() > seconds * 1000L;
     }
-    
+
     public void startCleanupTask() {
         int intervalSeconds = plugin.getConfigManager().getCleanupInterval();
-        cleanupTask = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, () -> {
-            long currentTime = System.currentTimeMillis();
-            long expirationTime = plugin.getConfigManager().getCacheExpiration() * 1000L;
-            
-            viewTimeCache.entrySet().removeIf(entry -> {
-                if (currentTime - entry.getValue() > expirationTime) {
-                    inventoryCache.remove(entry.getKey());
-                    return true;
-                }
-                return false;
-            });
+        // La caducidad se lee aqui, en el hilo principal: la config no se toca desde el async.
+        cleanupTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            int expiration = plugin.getConfigManager().getCacheExpiration();
+            inventoryCache.values().removeIf(data -> olderThan(data, expiration));
         }, intervalSeconds * 20L, intervalSeconds * 20L);
     }
-    
+
+    public void open(Player viewer, DeathInventoryData data) {
+        Inventory inventory = createInventoryGUI(viewer, data);
+        viewer.openInventory(inventory);
+        // Despues de abrir: openInventory cierra el inventario anterior, y ese cierre
+        // borraria la marca si se pusiera antes.
+        viewers.add(viewer.getUniqueId());
+    }
+
+    public boolean isViewing(UUID player) {
+        return !viewers.isEmpty() && viewers.contains(player);
+    }
+
+    public void closed(UUID player) {
+        viewers.remove(player);
+    }
+
     public void cleanup() {
         if (cleanupTask != null) {
             cleanupTask.cancel();
         }
         inventoryCache.clear();
-        viewTimeCache.clear();
+        for (UUID uuid : List.copyOf(viewers)) {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) {
+                player.closeInventory();
+            }
+        }
+        viewers.clear();
     }
     
     public Inventory createInventoryGUI(Player viewer, DeathInventoryData data) {

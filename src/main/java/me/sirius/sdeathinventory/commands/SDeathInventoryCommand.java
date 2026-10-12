@@ -9,7 +9,6 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.Inventory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -87,8 +86,7 @@ public class SDeathInventoryCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
             
-            Inventory inv = plugin.getInventoryManager().createInventoryGUI(player, data);
-            player.openInventory(inv);
+            plugin.getInventoryManager().open(player, data);
             
             return true;
         }

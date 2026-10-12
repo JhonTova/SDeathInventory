@@ -23,7 +23,7 @@ public class SDeathInventory extends SiriusPlugin {
         this.inventoryManager = new InventoryManager(this);
         
         getServer().getPluginManager().registerEvents(new DeathListener(this), this);
-        getServer().getPluginManager().registerEvents(new InventoryListener(), this);
+        getServer().getPluginManager().registerEvents(new InventoryListener(inventoryManager), this);
         
         SDeathInventoryCommand commandExecutor = new SDeathInventoryCommand(this);
         PluginCommand command = getCommand("sdeathinventory");
